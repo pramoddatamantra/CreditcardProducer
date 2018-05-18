@@ -60,7 +60,6 @@ object TrasactionProducer {
       transaction.setMerchLat(record.get(10))
       transaction.setMerchLong(record.get(11))
       val producerRecord = new ProducerRecord[String, Transaction]("creditTrasaction", transaction)
-      //producer.send(producerRecord)
       Thread.sleep(rand.nextInt(3000 - 1000) + 1000)
       count = count + 1
     }
