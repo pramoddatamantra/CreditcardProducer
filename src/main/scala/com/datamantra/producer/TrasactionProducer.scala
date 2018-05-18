@@ -1,15 +1,15 @@
 package com.datamantra.producer
 
-import java.io.{File, FileReader, BufferedReader}
+
+import java.io.File
 import java.util.{Random, Properties}
 
 import com.google.gson.{JsonObject, Gson}
 import creditcard.transaction.avro.Transaction
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
-import org.apache.commons.csv.CSVRecord;
 import java.nio.charset.Charset;
-import org.apache.kafka.clients.producer.{ProducerRecord, KafkaProducer, ProducerConfig}
+import org.apache.kafka.clients.producer._
 
 
 /**
@@ -20,7 +20,7 @@ object TrasactionProducer {
   val Props = new Properties()
   Props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092")
   //Props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.StringSerializer")
- // Props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, "io.confluent.kafka.serializers.KafkaAvroSerializer")
+  // Props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, "io.confluent.kafka.serializers.KafkaAvroSerializer")
   Props.put("key.serializer", "org.apache.kafka.common.serialization.StringSerializer")
   Props.put("value.serializer", "org.apache.kafka.common.serialization.StringSerializer")
   //Props.put("schema.registry.url", "http://localhost:8081")
@@ -91,13 +91,20 @@ object TrasactionProducer {
       obj.addProperty("merchlat", record.get(10))
       obj.addProperty("merchlong", record.get(11))
       val json: String = gson.toJson(obj)
-      val producerRecord = new ProducerRecord[String, String]("creditTrasaction", json)
-      producer.send(producerRecord)
+      val producerRecord = new ProducerRecord[String, String]("creditTransaction", json)
+      producer.send(producerRecord, new MyProducerCallback)
       Thread.sleep(rand.nextInt(3000 - 1000) + 1000)
     }
   }
 
-
+  class MyProducerCallback extends Callback {
+    def onCompletion(recordMetadata: RecordMetadata, e: Exception) {
+      if (e != null) System.out.println("AsynchronousProducer failed with an exception")
+      else {
+        System.out.println("Sent data to partition: " + recordMetadata.partition + " and offset: " + recordMetadata.offset)
+      }
+    }
+  }
 
   def main(args: Array[String]) {
 
