@@ -5,7 +5,7 @@ import java.io.File
 import java.util.{Random, Properties}
 
 import com.google.gson.{JsonObject, Gson}
-import creditcard.transaction.avro.Transaction
+import com.typesafe.config.ConfigFactory
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import java.nio.charset.Charset;
@@ -17,17 +17,30 @@ import org.apache.kafka.clients.producer._
  */
 object TrasactionProducer {
 
-  val Props = new Properties()
-  Props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, "localhost:9092")
-  //Props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, "org.apache.kafka.common.serialization.StringSerializer")
-  // Props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, "io.confluent.kafka.serializers.KafkaAvroSerializer")
-  Props.put("key.serializer", "org.apache.kafka.common.serialization.StringSerializer")
-  Props.put("value.serializer", "org.apache.kafka.common.serialization.StringSerializer")
-  //Props.put("schema.registry.url", "http://localhost:8081")
+  val applicationConf = ConfigFactory.load
 
-  val producer = new KafkaProducer[String, String](Props)
+  val props = new Properties()
+  var topic:String =  _
+  var producer:KafkaProducer[String, String] = _
 
+  def loadCommonConf() = {
 
+    props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, applicationConf.getString("kafka.key.serializer"))
+    props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, applicationConf.getString("kafka.value.serializer"))
+    props.put(ProducerConfig.ACKS_CONFIG, applicationConf.getString("kafka.acks"))
+    props.put(ProducerConfig.RETRIES_CONFIG, applicationConf.getString("kafka.retries"))
+    topic = applicationConf.getString("kafka.topic")
+  }
+
+  def loadLocalConf() = {
+    loadCommonConf()
+    props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, applicationConf.getString("kafka.local.bootstrap.servers"))
+  }
+
+  def loadClusterConf() = {
+    loadCommonConf()
+    props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, applicationConf.getString("kafka.cluster.bootstrap.servers"))
+  }
 
   def getCsvIterator(fileName:String) = {
 
@@ -36,7 +49,7 @@ object TrasactionProducer {
     csvParser.iterator()
   }
 
-
+/*
   def publishAvroRecord(fileName:String ): Unit = {
 
     val csvIterator = getCsvIterator(fileName)
@@ -59,13 +72,13 @@ object TrasactionProducer {
       transaction.setAmt(record.get(9).toDouble)
       transaction.setMerchLat(record.get(10))
       transaction.setMerchLong(record.get(11))
-      val producerRecord = new ProducerRecord[String, Transaction]("creditTrasaction", transaction)
+      val producerRecord = new ProducerRecord[String, Transaction](topic, transaction)
       Thread.sleep(rand.nextInt(3000 - 1000) + 1000)
       count = count + 1
     }
     println("record count: " + count)
   }
-
+*/
 
   def publishJsonMsg(fileName:String) = {
     val gson: Gson = new Gson
@@ -77,20 +90,20 @@ object TrasactionProducer {
       val record = csvIterator.next()
       println("Transaction Details:" + record.get(0),record.get(1),record.get(2),record.get(3),record.get(4),record.get(5),record.get(6),record.get(7),record.get(8),record.get(9), record.get(10), record.get(11))
       val obj: JsonObject = new JsonObject
-      obj.addProperty("cc_num", record.get(0))
-      obj.addProperty("first", record.get(1))
-      obj.addProperty("last", record.get(2))
-      obj.addProperty("transactionId", record.get(3))
-      obj.addProperty("transactionDate", record.get(4))
-      obj.addProperty("transactionTime", record.get(5))
-      obj.addProperty("unixTime", record.get(6))
-      obj.addProperty("category", record.get(7))
-      obj.addProperty("merchant", record.get(8))
-      obj.addProperty("amt", record.get(9))
-      obj.addProperty("merchlat", record.get(10))
-      obj.addProperty("merchlong", record.get(11))
+      obj.addProperty(TransactionKafkaEnum.cc_num, record.get(0))
+      obj.addProperty(TransactionKafkaEnum.first, record.get(1))
+      obj.addProperty(TransactionKafkaEnum.last, record.get(2))
+      obj.addProperty(TransactionKafkaEnum.trans_num, record.get(3))
+      obj.addProperty(TransactionKafkaEnum.trans_date, record.get(4))
+      obj.addProperty(TransactionKafkaEnum.trans_time, record.get(5))
+      obj.addProperty(TransactionKafkaEnum.unix_time, record.get(6))
+      obj.addProperty(TransactionKafkaEnum.category, record.get(7))
+      obj.addProperty(TransactionKafkaEnum.merchant, record.get(8))
+      obj.addProperty(TransactionKafkaEnum.amt, record.get(9))
+      obj.addProperty(TransactionKafkaEnum.merch_lat, record.get(10))
+      obj.addProperty(TransactionKafkaEnum.merch_long, record.get(11))
       val json: String = gson.toJson(obj)
-      val producerRecord = new ProducerRecord[String, String]("creditTransaction", json)
+      val producerRecord = new ProducerRecord[String, String](topic, json)
       producer.send(producerRecord, new MyProducerCallback)
       Thread.sleep(rand.nextInt(3000 - 1000) + 1000)
     }
@@ -107,8 +120,15 @@ object TrasactionProducer {
 
   def main(args: Array[String]) {
 
-    val file = args(0)
+    val runMode = args(0)
+    runMode match  {
 
+      case "local" => loadLocalConf()
+      case "cluster" => loadClusterConf()
+      case _ => throw new IllegalArgumentException("Invalid Parameters")
+    }
+    producer = new KafkaProducer[String, String](props)
+    val file = applicationConf.getString("kafka.producer.file")
     publishJsonMsg(file)
 
   }
