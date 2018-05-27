@@ -5,7 +5,7 @@ import java.io.File
 import java.util.{Random, Properties}
 
 import com.google.gson.{JsonObject, Gson}
-import com.typesafe.config.ConfigFactory
+import com.typesafe.config.{Config, ConfigFactory}
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import java.nio.charset.Charset;
@@ -17,29 +17,19 @@ import org.apache.kafka.clients.producer._
  */
 object TrasactionProducer {
 
-  val applicationConf = ConfigFactory.load
-
+  var applicationConf:Config = _
   val props = new Properties()
   var topic:String =  _
   var producer:KafkaProducer[String, String] = _
 
-  def loadCommonConf() = {
+  def load = {
 
+    props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, applicationConf.getString("kafka.bootstrap.servers"))
     props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, applicationConf.getString("kafka.key.serializer"))
     props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, applicationConf.getString("kafka.value.serializer"))
     props.put(ProducerConfig.ACKS_CONFIG, applicationConf.getString("kafka.acks"))
     props.put(ProducerConfig.RETRIES_CONFIG, applicationConf.getString("kafka.retries"))
     topic = applicationConf.getString("kafka.topic")
-  }
-
-  def loadLocalConf() = {
-    loadCommonConf()
-    props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, applicationConf.getString("kafka.local.bootstrap.servers"))
-  }
-
-  def loadClusterConf() = {
-    loadCommonConf()
-    props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, applicationConf.getString("kafka.cluster.bootstrap.servers"))
   }
 
   def getCsvIterator(fileName:String) = {
@@ -103,8 +93,12 @@ object TrasactionProducer {
       obj.addProperty(TransactionKafkaEnum.merch_lat, record.get(10))
       obj.addProperty(TransactionKafkaEnum.merch_long, record.get(11))
       val json: String = gson.toJson(obj)
-      val producerRecord = new ProducerRecord[String, String](topic, json)
-      producer.send(producerRecord, new MyProducerCallback)
+      val producerRecord = new ProducerRecord[String, String](topic, json) //Round Robin Partitioner
+      //val producerRecord = new ProducerRecord[String, String](topic, json.hashCode.toString, json)  //Hash Partitioner
+      //val producerRecord = new ProducerRecord[String, String](topic, 1, json.hashCode.toString, json)  //Specific Partition
+      //producer.send(producerRecord) //Fire and Forget
+      //producer.send(producerRecord).get() /*Synchronous Producer */
+      producer.send(producerRecord, new MyProducerCallback) /*Asynchrounous Produer */
       Thread.sleep(rand.nextInt(3000 - 1000) + 1000)
     }
   }
@@ -120,13 +114,8 @@ object TrasactionProducer {
 
   def main(args: Array[String]) {
 
-    val runMode = args(0)
-    runMode match  {
-
-      case "local" => loadLocalConf()
-      case "cluster" => loadClusterConf()
-      case _ => throw new IllegalArgumentException("Invalid Parameters")
-    }
+    applicationConf = ConfigFactory.parseFile(new File(args(0)))
+    load
     producer = new KafkaProducer[String, String](props)
     val file = applicationConf.getString("kafka.producer.file")
     publishJsonMsg(file)
