@@ -2,7 +2,9 @@ package com.datamantra.producer
 
 
 import java.io.File
-import java.util.{Random, Properties}
+import java.sql.Timestamp
+import java.text.SimpleDateFormat
+import java.util._
 
 import com.google.gson.{JsonObject, Gson}
 import com.typesafe.config.{Config, ConfigFactory}
@@ -78,21 +80,30 @@ object TrasactionProducer {
 
     while (csvIterator.hasNext) {
       val record = csvIterator.next()
-      println("Transaction Details:" + record.get(0),record.get(1),record.get(2),record.get(3),record.get(4),record.get(5),record.get(6),record.get(7),record.get(8),record.get(9), record.get(10), record.get(11))
+
       val obj: JsonObject = new JsonObject
+      val isoFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+      isoFormat.setTimeZone(TimeZone.getTimeZone("IST"));
+      val d = new Date()
+      val timestamp = isoFormat.format(d)
+      val unix_time = d.getTime
+
+
+      //println("Transaction Details:" + record.get(0),record.get(1),record.get(2),record.get(3),timestamp, record.get(7),record.get(8),record.get(9), record.get(10), record.get(11))
+
       obj.addProperty(TransactionKafkaEnum.cc_num, record.get(0))
       obj.addProperty(TransactionKafkaEnum.first, record.get(1))
       obj.addProperty(TransactionKafkaEnum.last, record.get(2))
       obj.addProperty(TransactionKafkaEnum.trans_num, record.get(3))
-      obj.addProperty(TransactionKafkaEnum.trans_date, record.get(4))
-      obj.addProperty(TransactionKafkaEnum.trans_time, record.get(5))
-      obj.addProperty(TransactionKafkaEnum.unix_time, record.get(6))
+      obj.addProperty(TransactionKafkaEnum.trans_time, timestamp)
+      //obj.addProperty(TransactionKafkaEnum.unix_time, unix_time)
       obj.addProperty(TransactionKafkaEnum.category, record.get(7))
       obj.addProperty(TransactionKafkaEnum.merchant, record.get(8))
       obj.addProperty(TransactionKafkaEnum.amt, record.get(9))
       obj.addProperty(TransactionKafkaEnum.merch_lat, record.get(10))
       obj.addProperty(TransactionKafkaEnum.merch_long, record.get(11))
       val json: String = gson.toJson(obj)
+      println("Transaction Record: " + json)
       val producerRecord = new ProducerRecord[String, String](topic, json) //Round Robin Partitioner
       //val producerRecord = new ProducerRecord[String, String](topic, json.hashCode.toString, json)  //Hash Partitioner
       //val producerRecord = new ProducerRecord[String, String](topic, 1, json.hashCode.toString, json)  //Specific Partition
@@ -105,7 +116,7 @@ object TrasactionProducer {
 
   class MyProducerCallback extends Callback {
     def onCompletion(recordMetadata: RecordMetadata, e: Exception) {
-      if (e != null) System.out.println("AsynchronousProducer failed with an exception")
+      if (e != null) System.out.println("AsynchronousProducer failed with an exception" + e)
       else {
         System.out.println("Sent data to partition: " + recordMetadata.partition + " and offset: " + recordMetadata.offset)
       }
@@ -119,6 +130,7 @@ object TrasactionProducer {
     producer = new KafkaProducer[String, String](props)
     val file = applicationConf.getString("kafka.producer.file")
     publishJsonMsg(file)
+
 
   }
 }
